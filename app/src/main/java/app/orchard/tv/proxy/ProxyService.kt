@@ -107,7 +107,12 @@ class ProxyService : VpnService() {
             .addAddress(MihomoConfig.TUN_ADDRESS, MihomoConfig.TUN_PREFIX)
             .addDnsServer(MihomoConfig.TUN_DNS)
             .addDisallowedApplication(packageName)
-        TunRoutes.complement().forEach { builder.addRoute(it.address, it.prefix) }
+        // Full default route, NOT a LAN-excluding complement: Android only steers app traffic
+        // into a VPN that covers 0.0.0.0/0 (a partial VPN gets uid ranges from netd but no RPDB
+        // steer rules, so every app keeps using Wi-Fi/Ethernet and the tunnel stays empty —
+        // observed live on XGIMI Android 13). LAN/private destinations are DIRECTed by the core's
+        // rule sets (private/RFC1918 rules ship with every rule mode) instead of by routes.
+        builder.addRoute("0.0.0.0", 0)
         // Without this Android 10+ marks the VPN metered and apps such as YouTube lower quality.
         if (Build.VERSION.SDK_INT >= 29) builder.setMetered(false)
         val immutable = if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0
