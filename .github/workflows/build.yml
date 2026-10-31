@@ -1,0 +1,80 @@
+name: Build APK
+
+# pr/vpn-proxy cherry-picked onto v1.74 (mihomo core, fetched by the app at runtime).
+# No libbox and no sing-box config validation here: this branch has neither.
+on:
+  push:
+    branches: [ pr966-v174 ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # The runner image already ships the Android SDK at /usr/local/lib/android/sdk.
+      - name: Locate sdkmanager
+        id: sdk
+        run: |
+          export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SDKMANAGER" ] || SDKMANAGER="$(command -v sdkmanager)"
+          echo "Using $SDKMANAGER in $ANDROID_SDK_ROOT"
+          echo "sdkmanager=$SDKMANAGER" >> "$GITHUB_OUTPUT"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+
+      - name: Accept SDK licenses
+        run: yes | "${{ steps.sdk.outputs.sdkmanager }}" --licenses > /dev/null 2>&1 || true
+
+      - name: Install SDK platform and build tools
+        run: |
+          "${{ steps.sdk.outputs.sdkmanager }}" --install "platforms;android-36" "build-tools;36.0.0" > /dev/null
+          "${{ steps.sdk.outputs.sdkmanager }}" --list_installed
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-pr966v174-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-pr966v174-${{ runner.os }}-
+
+      # No signing secrets: release/parallel fall back to the debug key (see app/build.gradle.kts),
+      # which installs fresh on the TV but cannot update an existing install.
+      - name: Build APKs
+        run: |
+          ./gradlew --no-daemon --stacktrace \
+            :app:assembleStandardRelease :app:assembleGuardRelease \
+            :app:assembleStandardParallel :app:assembleGuardParallel
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: aerial-vpn-proxy-apks
+          path: app/build/outputs/apk/*/*/release/*.apk
+          if-no-files-found: error
+
+      # parallel: applicationId suffix .proxytest + port 8792 — installs beside the official
+      # Aerial, so verifying the PR does not require uninstalling it.
+      - name: Upload the parallel (side-by-side) build
+        uses: actions/upload-artifact@v4
+        with:
+          name: aerial-vpn-proxy-parallel-apks
+          path: app/build/outputs/apk/*/parallel/*.apk
+          if-no-files-found: error
+
+      - name: Summary
+        run: |
+          echo "### Built APKs (pr/vpn-proxy on v1.74, mihomo core)" >> "$GITHUB_STEP_SUMMARY"
+          for f in app/build/outputs/apk/*/*/*.apk; do
+            echo "- \`$f\` — $(du -h "$f" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+          done

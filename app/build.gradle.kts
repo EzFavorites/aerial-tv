@@ -25,6 +25,7 @@ android {
         // see system/DiagLog.kt.
         val diag = project.hasProperty("diag")
         buildConfigField("boolean", "DIAG", diag.toString())
+        buildConfigField("int", "PHONE_PORT", "8790")
         if (diag) versionNameSuffix = "-diag"
     }
 
@@ -61,6 +62,19 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+
+            // 并行验证版：自己的 applicationId（app.orchard.tv.proxytest），可与官方 Aerial 同时安装。
+            // 端口错开官方的 8790（PhoneServer.PORT 走 BuildConfig.PHONE_PORT）。
+            create("parallel") {
+                applicationIdSuffix = ".proxytest"
+                versionNameSuffix = "-proxytest"
+                isMinifyEnabled = true
+                isShrinkResources = true
+                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+                signingConfig = signingConfigs.findByName("aerial") ?: signingConfigs.getByName("debug")
+                buildConfigField("int", "PHONE_PORT", "8792")
+            }
+
             signingConfig = signingConfigs.findByName("aerial") ?: signingConfigs.getByName("debug")
         }
     }

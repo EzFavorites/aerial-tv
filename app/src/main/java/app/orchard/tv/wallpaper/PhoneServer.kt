@@ -8,6 +8,7 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Log
 import androidx.core.content.getSystemService
+import app.orchard.tv.BuildConfig
 import app.orchard.tv.apps.AppCatalog
 import app.orchard.tv.apps.FOLDER_KEY_PREFIX
 import app.orchard.tv.apps.AppEntry
@@ -470,7 +471,8 @@ class PhoneServer private constructor(private val context: Context, private val 
     private fun text(status: Response.Status, msg: String) = newFixedLengthResponse(status, "text/plain; charset=utf-8", msg)
 
     companion object {
-        const val PORT = 8790
+        // 并行验证版（applicationIdSuffix .proxytest）通过 BuildConfig 错开官方的 8790，避免端口抢占。
+        val PORT = BuildConfig.PHONE_PORT
         private const val TAG = "AerialPhone"
         /** Enough for a batch of phone photos at full size. */
         private const val MAX_UPLOAD = 200L * 1024 * 1024
