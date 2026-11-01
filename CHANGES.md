@@ -43,15 +43,14 @@ val stockInFront = last != null && last.first in stockHomes
 - unknown 时拉回：把人从视频里拽出来（严重体验损失）
 - unknown 时不拉回：用户再按一次主页键即可（微小不便）
 
-## 变更 3：第 671-679 行 - 增强 unknown 时的诊断日志
+## 变更 3：第 671-683 行 - 增强 unknown 时的诊断日志
 
-在 `frontByUsage()` 返回 null 时，记录具体原因：
+在 `frontByUsage()` 返回 null 时，记录具体原因（用 fork 的 `foreground(UNKNOWN_FRONT_LOOKBACK_MS)` 实现）：
 - `usage stats not allowed`：未授权
-- `usage stats: closed=true`：UsageFront 判定为 closed
-- `usage stats: no MOVE_TO_FOREGROUND`：窗口内无前台事件
-- `usage stats: query failed`：查询异常
+- `usage stats: no MOVE_TO_FOREGROUND in 21600s`：窗口内无前台事件
+- `usage stats: last front <pkg>/<cls> at <time>`：查到了但被过滤（包名==Aerial 或其它）
 
-**重要性**：本机拿不到 logcat（极米 GMUI 限制），诊断里的 Log 段是唯一证据源。这行日志能让下一次定位直接知道是「没授权」还是「授权了但查不到」。
+**重要性**：本机拿不到 logcat（极米 GMUI 限制），诊断里的 DiagLog 段是唯一证据源。这行日志能让下一次定位直接知道是「没授权」还是「授权了但查不到」。
 
 ## 未做的变更
 
