@@ -100,6 +100,24 @@
 - 修复：`HomeGuardService.onAerialPaused()` 返回「这次暂停只是主页键的回弹、正在拉回」，MainActivity 就设 `vm.homeBounce`，航拍和视频壁纸按 `vm.filmFront`（resumed 或回弹中）继续播放；500ms 内没回来或进了 `onStop` 就照常释放。信号源壁纸不跟这个开关。
 - 实测（standard release，uinput）：单按 4 次之后都没有 `wallpaper film starts`，没有 `onStop`；间隔 120ms 连按两下照旧打开最近任务（`RecentsPanel`）；Aerial 在前台时仍不过滤按键（音量连发不受影响）。回弹期间 PatchWall 没有开解码器。户主还没有在电视前看。
 
+### 别的 App 里按主页键先闪 PatchWall（2026-11-01 修，未发版）
+
+- 现象：小米 Android 12+ 在别的 App（夸克、HDMI 信号源等）里按主页键，先闪一下 PatchWall 再回 Aerial。Aerial 自己在前台时没有（那里靠上面的 onPause 拉回）。
+- 在小米显示器 MFFU1（Android 14）上用 uinput 量的时间（抬键为 0）：+30ms 系统把 PatchWall 切到前台，约 +220ms PatchWall 画出第一帧，+290ms 守护才收到它的窗口事件开始拉回，Aerial 约 +550ms 画出来。录屏里 PatchWall 露出 7 帧。
+- 主页键广播帮不上：Android 14 对 `CLOSE_SYSTEM_DIALOGS` 用「等 App 活跃再送」（`deferralPolicy=2`），Aerial 在后台时广播被扣着，Aerial 被拉回前台后才送到（`dumpsys activity broadcasts history`：其他接收者 +1–3ms，Aerial +363ms）。
+- 试过、太晚的：用量统计本身有 100–250ms 延迟；`addOnUidImportanceListener`（反射能调到）夸克变后台要 +274ms。
+- 修复（`HomeGuardService.uiBoostChanged`）：小米的界面加速，`services.jar` 里 `com.mitv.server.tvqs.TVQSService.startBoostInternal` 在界面切换开始时把 `global mitv_fast_cur_anim_scale` 写成 0.5（结束写回 1.0），按键后 +45–65ms。守护用 ContentObserver 监听，之后每 20ms 读一次用量统计（最多 600ms），一看到 PatchWall 主界面刚切到前台就拉回，Aerial 在 PatchWall 画出来之前盖上去；用量统计先出现别的 App 就停（App 内切页也会触发加速）。开机、唤醒窗口内、「桌面」磁贴的访问都不走这条，原来的窗口事件仍是兜底。
+- 不按守护记的前台窗口判断：从后台再次打开的 App（比如从 Aerial 再开一次云视听极光）不发窗口事件（#475），守护记的还是 Aerial，第一版因此在 MFTR0 上对这类 App 不生效。
+- 试过、撤掉的第二个信号：无障碍的窗口变化（焦点离开、窗口移除，+120–230ms）。要打开 `FLAG_RETRIEVE_INTERACTIVE_WINDOWS`，而打开后系统会把窗口状态事件压到窗口列表更新之后，MFTR0 上兜底的窗口事件从 177–277ms 推迟到 336ms 以后，云视听小电视里按主页键反而闪了（户主在电视前看到）。
+- 用量统计的延迟决定了能不能赶上：MFFU1 上 PatchWall 出现在用量统计里是 +116–341ms，MFTR0 开着云视听小电视时 +136–434ms。
+- 实测（standard release，uinput 按主页键，screenrecord 逐帧比对，云视听小电视的画面录出来是黑的）：
+  - MFFU1 夸克：改前 7 帧 PatchWall；改后 8 次里 7 次 0 帧，确认在 +341ms 的 1 次仍闪。
+  - MFTR0 云视听小电视：改前 6 次都 0 帧（这台窗口事件 177–277ms 就到）；改后 6 次都 0 帧。MFTR0 夸克（从后台再开）4 次都 0 帧。
+  - 回归：Aerial 前台按主页键不闪、按键过滤仍关着；从 Aerial 开 App、App 内切页、App 叠 App、按返回都没被误拉；「桌面」磁贴留在 PatchWall；HDMI 里按主页键走新路径（HDMI 画面录屏录不到）。
+- 原有、没改的两个问题（户主 2026-11-01 在 MFTR0 上报）：
+  - Aerial 里连按两下主页键常露出 PatchWall，停 1–3 秒才被拉回：uinput 间隔 120ms，改前 5 次里 4 次、改后 5 次里 2 次（看日志里的 `stock home ... came to the front`；这台在 Aerial 首页录屏只录到几帧）。
+  - 长按主页键打开小米任务中心、全部清除：SystemUI（pid 2028）把 Aerial 强行停止（`am_kill ... stop app.orchard.tv due to from pid 2028`），PatchWall 停了约 30 秒 Aerial 才被拉起。
+
 ## 其他
 
 - 背光：`Settings.Global picture_backlight`（0–100），改了以后 `tvmenusettingsservice` 会立即应用。需要 `WRITE_SECURE_SETTINGS`。
@@ -141,3 +159,13 @@
 ## 打开 ADB 后有一个 USB 口不认设备（#907，#875 同一规则）
 
 `/vendor/etc/init/hw/init.mt9653.usb.rc`（户主这台 OS3.0，2026-10-30 读出）：`sys.usb.config=adb` 时执行 `usb_otg_agent device`，把 OTG 控制器 `1c7a3e00.usb` 切到设备模式；`none`、`mtp` 时切回 `host`；`persist.sys.usb.config=mtp,adb` 会被改写成 `mtp`。户主这台 `adb_enabled=1`、`sys.usb.config=adb`、`persist.sys.usb.config` 为空，所以这个控制器下的口（报告人说是 USB 2.0 那个）不认 U 盘和手柄。Aerial 不写 USB 配置，但 `keep_adb` 会在小米关掉 ADB 时重新打开它。没有插设备验证是哪个物理口；`mode` 文件要 root 才能读。海信 VIDAA（MT9952，#875）是同样的规则，报告人 `setprop persist.sys.usb.config mtp` 后重启恢复。
+
+## blbl 里按主页键慢 2 秒（#984，OS3.0.106）
+
+两位用户（MFTR0 OS3.0.106、MFFU0）在第三方 B 站客户端 `blbl.cat3399` 里按主页键，守护看得到 blbl 的窗口，却收不到之后 PatchWall 的窗口事件，开关一次无障碍也一样，只能等 1.5 s 后查用量统计。我们这台 OS3.0.101 上从云视听小电视按主页键，窗口事件 140 ms 就到。1.75 之后守护把这种 App 记下来，下次在里面按主页键就从按下起每 150 ms 查用量统计。
+
+## 航拍壁纸取帧（2026-11-01）
+
+- PixelCopy 读这台的视频层得到的是黑屏（`result 0, black`），每次 3–31ms；所以底板的磨砂全靠 `FrameReader` 从 1080p 文件解帧。`screencap` 倒是截得到影片画面。
+- 1.76 及以前，两条标记会让这台丢掉磨砂、只剩烟色：某次黑屏复制超过 150ms 被记成「PixelCopy 慢」（按固件指纹永久保存，连带不读文件）；或者某次解帧超过 10 秒被记成「本次开机文件卡住」。开机 2 天后户主发现底板没有磨砂，日志是 `copy false, file frames stuck true`。修复见 ARCHITECTURE「航拍壁纸取不到帧的电视」⑥。旧版写下的 `stuck_boot` 要重启一次才清掉。
+

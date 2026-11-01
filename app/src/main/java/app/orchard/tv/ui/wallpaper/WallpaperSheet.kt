@@ -13,7 +13,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.relocation.BringIntoViewResponder
 import androidx.compose.foundation.relocation.bringIntoViewResponder
@@ -65,6 +64,7 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
@@ -79,6 +79,9 @@ import app.orchard.tv.ui.components.Pressable
 import app.orchard.tv.ui.components.consumeTaps
 import app.orchard.tv.ui.components.dismissOnTap
 import app.orchard.tv.ui.components.liquidGlass
+import app.orchard.tv.ui.components.smoothBackground
+import app.orchard.tv.ui.components.smoothBorder
+import app.orchard.tv.ui.components.smoothCut
 import app.orchard.tv.ui.theme.Glyph
 import app.orchard.tv.ui.theme.GlyphIcon
 import app.orchard.tv.ui.theme.Motion
@@ -449,14 +452,24 @@ private fun wallpaperNote(wp: Wallpaper): String? = when {
     else -> null
 }
 
+private val CardCorner = 12.dp
+
 @Composable
 private fun WallpaperCard(wp: Wallpaper, focusRequester: FocusRequester?, onFocused: () -> Unit) {
     val selected = Wallpapers.selectedId == wp.id
     // A moving wallpaper's card is made again when the frame it stopped on changes, also while the
     // sheet is open: the film stopped as the sheet opened is decoded seconds later (Xiaomi MiTV-MFTR0).
     val picture = if (wp.kind == WallpaperKind.Live || wp.kind == WallpaperKind.Video) Wallpapers.pictureVersion else 0
-    val thumb by produceState<ImageBitmap?>(null, wp.id, Wallpapers.items, picture) {
-        value = withContext(Dispatchers.Default) { Wallpapers.thumbnail(wp.id)?.asImageBitmap() }
+    // The picture is cut to the card's continuous outline once, at the size it is drawn, so the
+    // card is one image draw and nothing is clipped (see SmoothCorners.kt).
+    val density = LocalDensity.current
+    val cardW = with(density) { 168.dp.roundToPx() }
+    val cardH = with(density) { 94.dp.roundToPx() }
+    val corner = with(density) { CardCorner.toPx() }
+    val thumb by produceState<ImageBitmap?>(null, wp.id, Wallpapers.items, picture, cardW, cardH) {
+        value = withContext(Dispatchers.Default) {
+            Wallpapers.thumbnail(wp.id)?.let { smoothCut(it, cardW, cardH, corner).asImageBitmap() }
+        }
     }
     Pressable(onClick = { Wallpapers.select(wp.id) }, focusRequester = focusRequester, focusedScale = 1.08f) { state ->
         LaunchedEffect(state.focused) { if (state.focused) onFocused() }
@@ -464,16 +477,15 @@ private fun WallpaperCard(wp: Wallpaper, focusRequester: FocusRequester?, onFocu
             Box(
                 Modifier
                     .size(168.dp, 94.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Palette.Fill)
-                    .border(
+                    .smoothBackground(if (thumb == null) Palette.Fill else Color.Transparent, CardCorner)
+                    .smoothBorder(
                         if (state.focused || selected) 3.dp else 1.dp,
                         when {
                             state.focused -> Palette.Focus
                             selected -> Palette.Focus.copy(alpha = 0.55f)
                             else -> Palette.Hairline
                         },
-                        RoundedCornerShape(12.dp),
+                        CardCorner,
                     ),
             ) {
                 thumb?.let {
@@ -539,8 +551,7 @@ private fun Group(note: String? = null, rows: @Composable ColumnScope.(note: (St
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color.White.copy(alpha = 0.05f))
+                .smoothBackground(Color.White.copy(alpha = 0.05f), 16.dp)
                 .onFocusChanged { inside = it.hasFocus },
         ) { rows { focusedNote = it } }
         Box(Modifier.height(38.dp).padding(start = 16.dp, top = 7.dp)) {
@@ -700,7 +711,7 @@ private fun ScreensaverChoice(onStart: () -> Unit) {
 private fun PhoneCard(url: String?, qr: ImageBitmap?) {
     Column(Modifier.width(220.dp).padding(top = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.size(176.dp).clip(RoundedCornerShape(18.dp)).background(Color.White).padding(14.dp),
+            Modifier.size(176.dp).smoothBackground(Color.White, 18.dp).padding(14.dp),
             contentAlignment = Alignment.Center,
         ) {
             if (qr != null) {

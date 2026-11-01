@@ -19,13 +19,20 @@ android {
         // Android 5.0. Compose 1.10 and later need 6.0, so the Compose BOM below stays on 1.9.
         minSdk = 21
         targetSdk = 34
-        versionCode = 94
-        versionName = "1.74"
+        versionCode = 99
+        versionName = "1.77"
         // `./gradlew -Pdiag ...`: a build for one reporter's TV whose logcat shows no app lines;
         // see system/DiagLog.kt.
         val diag = project.hasProperty("diag")
         buildConfigField("boolean", "DIAG", diag.toString())
         if (diag) versionNameSuffix = "-diag"
+    }
+
+    // A call newer than minSdk fails the release build (lintVital runs with assembleRelease):
+    // 1.74 shipped Context.getSystemService(Class), Android 6+, in the guard's onServiceConnected,
+    // and the guard crashed on every bind on Android 5 (issues #1010 #1012 #1017 #1018).
+    lint {
+        fatal += "NewApi"
     }
 
     // standard: a normal HOME app. guard: no HOME intent filter at all, for China-market firmwares

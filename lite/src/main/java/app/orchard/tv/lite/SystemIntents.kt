@@ -18,6 +18,8 @@ object SystemIntents {
         Intent("com.xiaomi.mitv.settings.SETTINGS").setComponent(ComponentName("com.xiaomi.mitv.settings", "com.xiaomi.mitv.settings.entry.MainActivity")),
         Intent(Intent.ACTION_MAIN).setComponent(ComponentName("com.haier.tv.menusetting", "com.haier.tv.menusetting.RootActivity")),
         Intent(Intent.ACTION_MAIN).setComponent(ComponentName("com.konka.tvsettings", "com.konka.settingcenter.settings.view.MainSettingsActivity")),
+        // Hisense VIDAA_TV: its own page before AOSP's, as in the full app (#1085).
+        Intent(Settings.ACTION_SETTINGS).setComponent(ComponentName("com.android.tv.settings", "com.hisense.systemsettings.MainActivity")),
         Intent(Settings.ACTION_SETTINGS),
         Intent(Intent.ACTION_MAIN).setComponent(ComponentName("com.konka.systemsetting", "com.konka.systemsetting.MainActivity")),
         Intent(Intent.ACTION_MAIN).setComponent(ComponentName("com.tcl.settings", "com.tcl.settings.ui.MainActivity")),
@@ -45,6 +47,30 @@ object SystemIntents {
         )
         val info = runCatching { context.packageManager.resolveActivity(intent, 0)?.activityInfo }.getOrNull()
         return intent.takeIf { info != null && info.exported && info.enabled && info.applicationInfo.enabled }
+    }
+
+    /**
+     * HDMI 1-3 through Xiaomi's player, which takes the port as its `input` number: 23-25, the
+     * full app's xiaomiSources. Mi TV 2 (49", Android 4.3) lists no inputs, and its owner opened
+     * them this way from another launcher (issue #1094); Mi TV 2 and 3 on Android 5.1 did the same
+     * in the full app (#599 #309). Not on boxes, which have the player but no HDMI inputs, and
+     * only before Android 5, where no TV lists its inputs: later Mi TV 4 boards number them
+     * otherwise, which the full app knows.
+     * CLEAR_TOP: a player task in the background is otherwise only brought back, its input unchanged.
+     */
+    fun xiaomiInputs(context: Context): List<Pair<String, Intent>> {
+        if (Build.VERSION.SDK_INT >= 21) return emptyList()
+        val player = ComponentName("com.xiaomi.mitv.tvplayer", "com.xiaomi.mitv.tvplayer.ExternalSourceActivity")
+        if (runCatching { context.packageManager.getActivityInfo(player, 0) }.isFailure) return emptyList()
+        val traits = runCatching {
+            Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, "ro.build.characteristics") as String
+        }.getOrNull().orEmpty()
+        if ("stb" in traits || "mbx" in traits) return emptyList()
+        return (1..3).map { port ->
+            "HDMI $port" to Intent("com.xiaomi.mitv.tvplayer.EXTSRC_PLAY").setComponent(player)
+                .putExtra("input", 22 + port)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
     }
 
     /**

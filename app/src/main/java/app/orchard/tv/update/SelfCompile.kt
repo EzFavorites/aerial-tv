@@ -76,10 +76,25 @@ object SelfCompile {
         offered = worth && Build.VERSION.SDK_INT < 31
     }
 
+    /**
+     * Compiled since [init] looked, by ADB's `cmd package compile` or the system's dexopt while
+     * the TV idles: the row goes. The process stays, so it was still offered on TCL MT5879
+     * (Android 11) after a 多屏互动 install compiled with ADB just after Aerial started.
+     * Only the file's length: cheap enough for the main thread.
+     */
+    fun recheck(context: Context) {
+        if (!offered) return
+        val odex = odexBytes(context) ?: return
+        if (odex < COMPILED_BYTES) return
+        offered = false
+        DiagLog.i("self compile: compiled since (odex ${odex / 1024} KB); no longer offered")
+    }
+
     fun diagnostics(context: Context): String =
         "tried for this version=${triedThisVersion(context)}, offered=$offered"
 
-    fun onHomeStarted() {
+    fun onHomeStarted(context: Context) {
+        recheck(context)
         inFront = true
         main.removeCallbacks(auto)
     }

@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.content.edit
+import androidx.core.content.getSystemService
 import kotlin.math.abs
 
 /**
@@ -81,10 +82,11 @@ object BootOpen {
      * Xiaomi MiTV-ASTP0 (Android 9) stops Aerial on the way into standby before the screen-off
      * broadcast reaches it, and a short standby does not suspend the kernel long enough for
      * [sleptSince]; the guard revived in standby is the only one to know (issue #964, 6 of 6 wakes
-     * from Home stayed on Aerial's Home).
+     * from Home stayed on Aerial's Home). getSystemService(Class) is Android 6+: the guard crashed on
+     * every bind on Android 5.1 in 1.74 (issues #1010 #1012 #1017 #1018), so this goes through core-ktx.
      */
     fun noteStartedInStandby(context: Context) {
-        if (context.getSystemService(PowerManager::class.java)?.isInteractive == false) noteScreenOff(context)
+        if (context.getSystemService<PowerManager>()?.isInteractive == false) noteScreenOff(context)
     }
 
     /** Whether the screen went off in this boot after the target was last opened. */

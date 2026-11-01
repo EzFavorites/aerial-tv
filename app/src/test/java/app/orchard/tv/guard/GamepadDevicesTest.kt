@@ -39,7 +39,30 @@ class GamepadDevicesTest {
         assertTrue(GamepadDevices.isPhysicalGamepad("aml_keypad pro", false, true, 0x0001, 0x0001))
     }
 
+    @Test fun filtersRedmiProjectorBluetoothRemote() {
+        assertFalse(GamepadDevices.isPhysicalGamepad("小米蓝牙语音遥控器", false, true, 0x2717, 0x32b8))
+        assertTrue(GamepadDevices.isPhysicalGamepad("USB Gamepad", false, true, 0x2717, 0x32b8))
+        assertTrue(GamepadDevices.isPhysicalGamepad("小米蓝牙语音遥控器", false, true, 0x2717, 0x0001))
+    }
+
+    @Test fun filtersRedmiProjectorBuiltInKeyboardWrapper() {
+        assertFalse(GamepadDevices.isPhysicalGamepad("Hi keyboard", false, true, 0x0001, 0x0001))
+        assertTrue(GamepadDevices.isPhysicalGamepad("Hi keyboard", false, true, 0x046d, 0xc21f))
+    }
+
     @Test fun rejectsDevicesWithoutGamepadSource() {
         assertFalse(GamepadDevices.isPhysicalGamepad("Keyboard", false, false, 0x1234, 0x5678))
+    }
+
+    @Test fun externalMouseCounts() {
+        assertTrue(GamepadDevices.isExternalMouse(isExternal = true, isVirtual = false, supportsMouse = true))
+    }
+
+    @Test fun builtInPointerAndOthersDoNot() {
+        // TCL MT5879's gIrTouch_Mouse: MOUSE | TOUCHPAD, not external.
+        assertFalse(GamepadDevices.isExternalMouse(isExternal = false, isVirtual = false, supportsMouse = true))
+        assertFalse(GamepadDevices.isExternalMouse(isExternal = true, isVirtual = true, supportsMouse = true))
+        // Xiaomi's Bluetooth remote: external, keyboard and dpad only.
+        assertFalse(GamepadDevices.isExternalMouse(isExternal = true, isVirtual = false, supportsMouse = false))
     }
 }
