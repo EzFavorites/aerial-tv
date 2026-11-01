@@ -3,6 +3,11 @@
     <string name="guard_name">Aerial 桌面守护</string>
     <string name="guard_description">在不允许更换桌面的电视上，让 Aerial 保持为主屏幕。不会读取任何屏幕内容。</string>
 
+    <!-- Test build markers -->
+    <string name="test_build_marker">测试版本</string>
+    <string name="test_build_app_name">Aerial [测试]</string>
+    <string name="test_build_summary">这是一个测试版本（app.orchard.tv.test），可以与官方 Aerial 并存安装。</string>
+
     <string name="greeting_morning">早上好</string>
     <string name="greeting_afternoon">下午好</string>
     <string name="greeting_evening">晚上好</string>

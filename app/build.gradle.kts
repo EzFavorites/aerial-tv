@@ -14,18 +14,27 @@ android {
     namespace = "app.orchard.tv"
     compileSdk = 36
 
+    // Test build: use different applicationId to avoid conflict with official Aerial
+    val testBuild = project.hasProperty("testBuild")
+    val testApplicationId = System.getProperty("test.applicationId", "app.orchard.tv.test")
+    val testVersionNameSuffix = System.getProperty("test.versionNameSuffix", "-test")
+    val testVersionCodeSuffix = System.getProperty("test.versionCodeSuffix", "9000").toInt()
+
     defaultConfig {
-        applicationId = "app.orchard.tv"
+        // Use test applicationId if testBuild is true, otherwise official
+        applicationId = if (testBuild) testApplicationId else "app.orchard.tv"
         // Android 5.0. Compose 1.10 and later need 6.0, so the Compose BOM below stays on 1.9.
         minSdk = 21
         targetSdk = 34
-        versionCode = 94
-        versionName = "1.74"
+        versionCode = if (testBuild) 94 + testVersionCodeSuffix else 94
+        versionName = if (testBuild) "1.74$testVersionNameSuffix" else "1.74"
         // `./gradlew -Pdiag ...`: a build for one reporter's TV whose logcat shows no app lines;
         // see system/DiagLog.kt.
         val diag = project.hasProperty("diag")
         buildConfigField("boolean", "DIAG", diag.toString())
         if (diag) versionNameSuffix = "-diag"
+        // Also add test build marker
+        if (testBuild) buildConfigField("boolean", "TEST_BUILD", "true")
     }
 
     // standard: a normal HOME app. guard: no HOME intent filter at all, for China-market firmwares

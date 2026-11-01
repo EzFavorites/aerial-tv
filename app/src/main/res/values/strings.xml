@@ -4,6 +4,11 @@
     <string name="guard_name">Aerial Home Guard</string>
     <string name="guard_description">Keeps Aerial as your home screen on TVs that do not let you change it. Reads no screen content.</string>
 
+    <!-- Test build markers -->
+    <string name="test_build_marker">TEST BUILD</string>
+    <string name="test_build_app_name">Aerial [TEST]</string>
+    <string name="test_build_summary">This is a test build (app.orchard.tv.test). It can be installed alongside the official Aerial.</string>
+
     <string name="greeting_morning">Good morning</string>
     <string name="greeting_afternoon">Good afternoon</string>
     <string name="greeting_evening">Good evening</string>
