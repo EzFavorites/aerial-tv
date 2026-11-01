@@ -20,13 +20,15 @@ on:
 
 env:
   JAVA_VERSION: '17'
-  GRADLE_VERSION: '8.5'
 
 jobs:
   build:
     name: Build APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Secrets must be routed through env before they can be used in `if:` conditions.
+    env:
+      AERIAL_KEYSTORE_BASE64: ${{ secrets.AERIAL_KEYSTORE_BASE64 }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -38,21 +40,18 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           cache: gradle
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: ${{ env.GRADLE_VERSION }}
-
       - name: Decode keystore
         id: decode_keystore
-        if: ${{ secrets.AERIAL_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.AERIAL_KEYSTORE_BASE64 != '' }}
         run: |
-          echo "${{ secrets.AERIAL_KEYSTORE_BASE64 }}" | base64 -d > ./aerial-release.keystore
-          echo "keystore_path=./aerial-release.keystore" >> $GITHUB_OUTPUT
+          mkdir -p local
+          echo "$AERIAL_KEYSTORE_BASE64" | base64 -d > local/aerial-release.keystore
+          echo "keystore_path=local/aerial-release.keystore" >> $GITHUB_OUTPUT
 
       - name: Create signing config
-        if: ${{ secrets.AERIAL_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.AERIAL_KEYSTORE_BASE64 != '' }}
         run: |
+          mkdir -p local
           cat > local/signing.properties <<EOF
           storeFile=aerial-release.keystore
           storePassword=${{ secrets.AERIAL_STORE_PASSWORD }}
@@ -60,16 +59,6 @@ jobs:
           keyPassword=${{ secrets.AERIAL_KEY_PASSWORD }}
           EOF
           cat local/signing.properties
-
-      - name: Create custom build config
-        run: |
-          cat > local/test-build.properties <<EOF
-          # Test build: different package name to avoid conflicts with official
-          test.applicationId=app.orchard.tv.test
-          test.versionNameSuffix=${{ github.event.inputs.version_suffix }}
-          test.versionCodeSuffix=9000
-          EOF
-          cat local/test-build.properties
 
       - name: Build Standard Release
         if: ${{ github.event.inputs.build_standard == 'true' }}
@@ -101,11 +90,11 @@ jobs:
           echo "Found standard: ${STANDARD_APK}"
           echo "Found guard: ${GUARD_APK}"
 
-      - name: Verify APK signature
+      - name: Verify APK signature and package
         if: ${{ steps.find_apks.outputs.standard_apk != '' || steps.find_apks.outputs.guard_apk != '' }}
         run: |
           for apk in "${{ steps.find_apks.outputs.standard_apk }}" "${{ steps.find_apks.outputs.guard_apk }}"; do
-            if [ -f "$apk" ]; then
+            if [ -n "$apk" ] && [ -f "$apk" ]; then
               echo "=== $apk ==="
               apksigner verify --print-certs "$apk" 2>&1 || true
               aapt dump badging "$apk" 2>&1 | grep -E "package:|application-label:|versionCode|versionName" || true
